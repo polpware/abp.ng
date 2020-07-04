@@ -13,32 +13,18 @@ export default createBuilder<Options>((options, context) => {
   return new Promise<BuilderOutput>(async (resolve) => {
     const systemRoot = context.workspaceRoot;
     const symlinkConfigPath = options.symlinkConfig
-    ? path.resolve(systemRoot, options.symlinkConfig)
-    : '';
+      ? path.resolve(systemRoot, options.symlinkConfig)
+      : '';
 
-    let buildActions=JSON.parse(getFileContents(symlinkConfigPath));
+    let buildActions = JSON.parse(getFileContents(symlinkConfigPath));
+    console.log(`//////////////////////////////////////////`);
     console.log(`Task Executing ...`);
 
-    for (var i = 0; i < buildActions.length; i++) {
-      console.log(`"${buildActions[i].name}" Symlink building ...`);
-      let buildPackages=buildActions[i].packages.filter((x: any)=>!buildActions[i].ignore_packages || buildActions[i].ignore_packages.indexOf(x)==-1);
-      await execa(
-        'yarn',
-        [
-          'symlink',
-          'copy',
-          '--angular',
-          '--prod',
-          '--yarn',
-          '--no-watch',
-          buildActions[i].sync ? '--sync' : '',
-          '--packages',
-          buildPackages.join(',')
-        ],
-        { stdout: 'inherit', cwd: './' },
-      );
-      console.log(`"${buildActions[i].name}" Symlink done ...`);
+    for (let i = 0; i < buildActions.length; i++) {
+      let job = buildActions[i];
+      await doJob(job);
     }
+    console.log(`//////////////////////////////////////////`);
     console.log(`Task Done.`);
 
     resolve({ success: true });
@@ -49,5 +35,31 @@ function getFileContents(file: string): string {
     return readFileSync(file, 'utf-8');
   } catch {
     throw new Error(`Could not read file '${file}'.`);
+  }
+}
+async function doJob(buildAction: any) {
+  let buildPackages = buildAction.packages.filter((x: any) => !buildAction.ignore_packages || buildAction.ignore_packages.indexOf(x) == -1);
+  console.log('----------------------------------------------');
+  console.log(`Building packages: ${buildPackages.join(',')}`);
+
+  let commands=buildPackages.map((packName:any)=>{
+    return  [
+      'ng',
+      'build',
+      packName,
+      '--prod'
+    ];
+  });
+  if(buildAction.sync){
+    commands.forEach((command:any)=>{
+      execa.sync('yarn', command);
+      console.log(`\n${command[2]} successfully built.`);    
+    });
+  }
+  else{
+    await Promise.all(commands.map(async (command:any)=>{
+      await execa('yarn',command);
+      console.log(`\n${command[2]} successfully built.`);    
+    }));
   }
 }
